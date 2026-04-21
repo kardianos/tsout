@@ -833,22 +833,26 @@ func (p *Program) verifyCompilerOptions() {
 		createRemovedOptionDiagnostic("baseUrl", "", useInstead)
 	}
 
-	if options.OutFile != "" {
-		createRemovedOptionDiagnostic("outFile", "", "")
-	}
+	// outFile and ES5 target intentionally allowed (re-enabled by outfile-support patch).
+	// if options.Target == core.ScriptTargetES3 {
+	// 	createRemovedOptionDiagnostic("target", "ES3", "")
+	// }
+	// if options.Target == core.ScriptTargetES5 {
+	// 	createRemovedOptionDiagnostic("target", "ES5", "")
+	// }
 
-	if options.Target == core.ScriptTargetES5 {
-		createRemovedOptionDiagnostic("target", "ES5", "")
-	}
-
-	if options.Module == core.ModuleKindAMD {
-		createRemovedOptionDiagnostic("module", "AMD", "")
-	}
-	if options.Module == core.ModuleKindSystem {
-		createRemovedOptionDiagnostic("module", "System", "")
-	}
-	if options.Module == core.ModuleKindUMD {
-		createRemovedOptionDiagnostic("module", "UMD", "")
+	// AMD, System, and UMD module kinds are deprecated but still allowed when outFile is specified
+	// since outFile traditionally works with these module kinds for bundling
+	if options.OutFile == "" {
+		if options.Module == core.ModuleKindAMD {
+			createRemovedOptionDiagnostic("module", "AMD", "")
+		}
+		if options.Module == core.ModuleKindSystem {
+			createRemovedOptionDiagnostic("module", "System", "")
+		}
+		if options.Module == core.ModuleKindUMD {
+			createRemovedOptionDiagnostic("module", "UMD", "")
+		}
 	}
 
 	if options.ModuleResolution == core.ModuleResolutionKindClassic {
@@ -911,6 +915,18 @@ func (p *Program) verifyCompilerOptions() {
 
 	if options.TsBuildInfoFile == "" && options.Incremental.IsTrue() && options.ConfigFilePath == "" {
 		createCompilerOptionsDiagnostic(diagnostics.Option_incremental_is_only_valid_with_a_known_configuration_file_like_tsconfig_json_or_when_tsBuildInfoFile_is_explicitly_provided)
+	}
+
+	// Validate outFile option
+	if options.OutFile != "" {
+		// outFile is only supported with None, AMD, System, or UMD module kinds
+		// Use raw Module value, not GetEmitModuleKind() which transforms None -> ES2015/CommonJS
+		switch options.Module {
+		case core.ModuleKindNone, core.ModuleKindAMD, core.ModuleKindSystem, core.ModuleKindUMD:
+			// Valid module kinds for outFile
+		default:
+			createOptionValueDiagnostic("outFile", diagnostics.Only_amd_and_system_modules_are_supported_alongside_0, "outFile")
+		}
 	}
 
 	p.verifyProjectReferences()
@@ -1154,7 +1170,12 @@ func (p *Program) verifyCompilerOptions() {
 		createDiagnosticForOptionName(diagnostics.Option_0_can_only_be_used_when_moduleResolution_is_set_to_node16_nodenext_or_bundler, "customConditions", "")
 	}
 
-	if moduleResolution == core.ModuleResolutionKindBundler && !emitModuleKindIsNonNodeESM(moduleKind) && moduleKind != core.ModuleKindPreserve && moduleKind != core.ModuleKindCommonJS {
+	// outFile bundling requires module=amd|system, which is incompatible with
+	// the default moduleResolution=bundler. Suppress the diagnostic for that
+	// combination so outFile users do not have to invent a moduleResolution
+	// value that would also satisfy this check (all the legacy ones - classic,
+	// node10 - have been removed).
+	if options.OutFile == "" && moduleResolution == core.ModuleResolutionKindBundler && !emitModuleKindIsNonNodeESM(moduleKind) && moduleKind != core.ModuleKindPreserve && moduleKind != core.ModuleKindCommonJS {
 		createOptionValueDiagnostic("moduleResolution", diagnostics.Option_0_can_only_be_used_when_module_is_set_to_preserve_commonjs_or_es2015_or_later, "bundler")
 	}
 
@@ -1644,6 +1665,11 @@ func (p *Program) Emit(ctx context.Context, options EmitOptions) *EmitResult {
 		if result != nil || ctx.Err() != nil {
 			return result
 		}
+	}
+
+	// Use bundled emit when OutFile is set.
+	if shouldEmitBundled(p.Options()) {
+		return p.EmitBundled(ctx, options)
 	}
 
 	newLine := p.Options().NewLine.GetNewLineCharacter()
