@@ -79,15 +79,20 @@ echo ">>> Resetting local ${PUBLISH_BRANCH} to ${UPSTREAM_REF}"
 git switch -C "$PUBLISH_BRANCH" "$UPSTREAM_REF"
 
 echo ">>> Applying ${PATCH_FILE}"
+# Apply on a clean upstream tree. --index stages changes for the single commit.
 if ! git apply --index --whitespace=nowarn "$TMP_PATCH"; then
   echo "error: git apply failed. Working tree is ${PUBLISH_BRANCH} @ ${UPSTREAM_REF} with a partial apply." >&2
-  echo "       Fix conflicts, or: git switch -C ${PUBLISH_BRANCH} ${UPSTREAM_REF}" >&2
+  echo "       Inspect with git status; restore clean with:" >&2
+  echo "         git switch -C ${PUBLISH_BRANCH} ${UPSTREAM_REF}" >&2
   exit 1
 fi
 
-if [[ -z "$(git diff --cached --name-only)" ]]; then
-  die "patch applied but staged nothing; is ${PATCH_FILE} empty or already applied?"
+if [[ -z "$(git diff --cached --name-only)" && -z "$(git ls-files --others --exclude-standard)" ]]; then
+  die "patch applied but produced no changes; is ${PATCH_FILE} empty or already applied?"
 fi
+
+# Ensure any unstaged apply leftovers are included (defensive).
+git add -A
 
 echo ">>> Committing single patch commit"
 git commit -m "$COMMIT_MSG"
@@ -95,9 +100,8 @@ NEW_MAIN_SHA=$(git rev-parse HEAD)
 echo ">>> ${PUBLISH_BRANCH} is now $(git log -1 --oneline HEAD) (parent $(git rev-parse --short HEAD^))"
 
 echo ">>> Pushing ${REMOTE_PUBLISH}/${PUBLISH_BRANCH} (--force-with-lease)"
-git push --force-with-lease="$PUBLISH_BRANCH:${REMOTE_PUBLISH}/${PUBLISH_BRANCH}" \
-  "$REMOTE_PUBLISH" "HEAD:refs/heads/${PUBLISH_BRANCH}" \
-  || git push --force-with-lease "$REMOTE_PUBLISH" "HEAD:refs/heads/${PUBLISH_BRANCH}"
+git push --force-with-lease="$PUBLISH_BRANCH:refs/heads/${PUBLISH_BRANCH}" \
+  "$REMOTE_PUBLISH" "refs/heads/${PUBLISH_BRANCH}"
 
 # Optional recovery tag pointing at this built tip
 TAG_NAME="outfile/$(git rev-parse --short "$UPSTREAM_SHA")"
