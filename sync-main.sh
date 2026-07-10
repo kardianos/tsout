@@ -100,8 +100,8 @@ NEW_MAIN_SHA=$(git rev-parse HEAD)
 echo ">>> ${PUBLISH_BRANCH} is now $(git log -1 --oneline HEAD) (parent $(git rev-parse --short HEAD^))"
 
 echo ">>> Pushing ${REMOTE_PUBLISH}/${PUBLISH_BRANCH} (--force-with-lease)"
-git push --force-with-lease="$PUBLISH_BRANCH:refs/heads/${PUBLISH_BRANCH}" \
-  "$REMOTE_PUBLISH" "refs/heads/${PUBLISH_BRANCH}"
+# Uses remote-tracking tips from the fetch above; refuses if someone else moved main.
+git push --force-with-lease "$REMOTE_PUBLISH" "${PUBLISH_BRANCH}:${PUBLISH_BRANCH}"
 
 # Optional recovery tag pointing at this built tip
 TAG_NAME="outfile/$(git rev-parse --short "$UPSTREAM_SHA")"

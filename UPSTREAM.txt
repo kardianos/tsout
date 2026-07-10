@@ -1,6 +1,6 @@
 upstream_remote=origin
 upstream_branch=main
 upstream_sha=168e7015edf98244febc8f4ae450b673b5d195d7
-main_sha=9294539a61a4944764c192245f300af52695f961
-synced_at=2026-07-10T15:29:03Z
+main_sha=02f7358defb19bb732916c44820562bb45107e01
+synced_at=2026-07-10T15:29:33Z
 commit_msg=internal/compiler: support outfile and cross file namespaces
